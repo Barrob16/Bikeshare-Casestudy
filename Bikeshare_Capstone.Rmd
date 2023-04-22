@@ -1,0 +1,241 @@
+---
+title: "Bikeshare Capstone"
+author: "Robin Bartels"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Data Analysis Casestudy Project: __Cyclystic Bike-Share__
+
+</br>
+
+#### Google coursera data analytics capstone. In this scenario I am a junior data analyst working for cylistic bikes. With the goal of maximising annual memberships we examine the data set and perform the phases of data analysis while preparing deliverables.  
+
+</br>
+
+##### __Business task:__ Find ways of maximising anual memberships by understanding and comparing casual and annual ridership. 
+##### __Stakeholders:__ Lily Moreno (Dir. of marketing), the cyclistic marketing analytics team and the cylistic executive team. 
+##### __Data:__ 12 months of historical trip data in CSV form. It is from the 2019 year, split into four quarters contained in four different files. 
+##### __Public license:__ It is made available through motivate international inc by <https://ride.divvybikes.com/data-license-agreemente> 
+##### __Data limitations:__ A limitation of the data is that due to data privacy concerns we cannot acess and connect pass purchases to rider addresses. 
+##### __Programs used:__ RStudio
+##### __R packages used:__ tidyverse, ggplot2, dplyr and lubridate 
+
+</br>
+
+#### We will start by installing the packages with _install.packages()_ and then intializing them with _library()._ These packages are what we will use to perform data cleaning, filtering and graphing.
+
+```
+install.packages("tidyverse")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("lubridate")
+```
+```{r}
+library("tidyverse")  # "designed to make it easy to install and load multiple 'tidyverse' packages in a single step"
+library("ggplot2")    # "You provide the data, tell 'ggplot2' how to map variables to aesthetics, what graphical primitives to use, and it takes care of the details.
+library("dplyr")      #
+library("lubridate")  # "Lubridate provides tools that make it easier to parse and manipulate dates."
+```
+
+</br>
+
+#### Next we will take the raw data in the CSV files and use the _read_csv()_ function to bring them into R.
+```{r}
+q1 <- read_csv("2019_Q1.csv")
+q2 <- read_csv("2019_Q2.csv")
+q3 <- read_csv("2019_Q3.csv")
+q4 <- read_csv("2019_Q4.csv")
+```
+
+</br> 
+
+## _Preparing the Data:_
+
+#### Now that the CSV files are brought into R we can perform some initial observations to understand the datasets. We use _colnames()_ to learn what the column names are in each of the four datasets. The column names in the q2 (2019_q2.csv) dataset need to be appropriately changed to achieve standerdisation.
+```{r}
+colnames(q1)
+colnames(q2) # The colnames are different in this data set than the rest. 
+colnames(q3)
+colnames(q4)
+```
+
+</br> 
+
+#### With _glimpse()_ we can also see what type of data in contained in each colummn and if its the same. 
+```{r}
+glimpse(q1)
+glimpse(q2)
+glimpse(q3)
+glimpse(q4)
+```
+
+</br> 
+</br>
+</br>
+</br>
+
+# _Processing the data:_
+#### Now that we understand what data we have we can begin to process it for further steps. First we will make sure all column names are the same.
+```{r}
+
+q2 <- q2 %>% 
+  rename("trip_id" = "01 - Rental Details Rental ID",
+        "start_time"  = "01 - Rental Details Local Start Time",
+        "end_time" = "01 - Rental Details Local End Time",
+        "bikeid" = "01 - Rental Details Bike ID",
+        "tripduration" = "01 - Rental Details Duration In Seconds Uncapped",
+        "from_station_id" = "03 - Rental Start Station ID",
+        "from_station_name" = "03 - Rental Start Station Name",
+        "to_station_id" = "02 - Rental End Station ID",
+        "to_station_name" = "02 - Rental End Station Name",
+        "usertype" = "User Type",
+        "gender" = "Member Gender",
+        "birthyear" = "05 - Member Details Member Birthday Year")
+```
+
+</br>
+
+#### Now we can combine the four quarterly datasets into one year long data set that we will call 'yeardata' using the _bind_rows()_ function.
+```{r}
+yeardata <- bind_rows(q1, q2, q3, q4)
+```
+
+</br> 
+
+#### There are two unique values in the Usertype column. We will change them for clearer readability.
+```{r}
+yeardata$usertype[yeardata$usertype == 'Subscriber'] <- 'Annual Membership'
+yeardata$usertype[yeardata$usertype == 'Customer'] <- 'Single Use'
+```
+
+</br>
+
+#### There is no column that has ride of length. We do have start_time and end_time therefore we can use the _difftime()_ function to determine the length of trip.
+```{r}
+yeardata$ride_length <- difftime(yeardata$end_time,yeardata$start_time)
+```
+
+</br>
+
+#### Now we will check for any 0 length or negative length trips that might be anomolies and remove them:
+```{r}
+yeardata %>% # With this we can see the rides with lengths at or less than 0.
+  select(ride_length) %>% 
+  filter(ride_length <= 0.0) 
+```
+```{r}
+yeardata <- yeardata[yeardata$ride_length > 0.0, ] # Now we establish the data set yeardata with only rides above 0
+```
+```{r}
+yeardata %>% # Now we can see if our function worked correctly.
+  select(ride_length) %>% 
+  filter(ride_length <= 0.0) 
+```
+```{r}
+yeardata <- yeardata[!duplicated(yeardata), ] # This function to remove duplicate rows.
+```
+
+</br>
+
+#### Create a new column that extracts the month from start_time in a 1-12 format. Aggregate the date and time into seperate categories: Day, month and Day of week for analysis. Rearrange the display order of day_of_week for context of future charts.
+```{r}
+yeardata <- yeardata %>% 
+  mutate(trip_month=month(yeardata$start_time))
+```
+```{r}
+yeardata$date <- as.Date(yeardata$start_time) 
+yeardata$month <- format(as.Date(yeardata$date), "%m") # Month
+yeardata$day <- format(as.Date(yeardata$date), "%d") # Day
+yeardata$day_of_week <- format(as.Date(yeardata$date), "%A") # Day_of_week
+```
+```{r}
+yeardata$day_of_week <- ordered(yeardata$day_of_week, levels=c( "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")) # Reorders days of week to Monday first and Sunday last.
+```
+```{R}
+colnames(yeardata)
+```
+
+</br> 
+</br>
+</br>
+</br>
+
+## _Visualizing our data:_
+#### Lets use _ggplot()_ and _geom_bar()_ to do some graphs. First we will visualise how many yearly riders we have in each usertype category. We can see there are many more annual subscribers than single use subscribers.
+```{r}
+ggplot(data=yeardata)+
+  geom_bar(mapping=aes(x=usertype,fill=usertype))+
+  labs(title="Usertypes compared")
+```
+
+</br> 
+</br> 
+</br>
+
+#### Now we will plot a bar graph of trips per month, split by usertype. 
+#### We can see what we would expect in that there is a spike in ridership during the summer months and a downward trend during the "off-season". 
+#### Months are in a 1-12 format. Where 1 = January, 12 = December. 
+```{r}
+ggplot(data=yeardata)+
+  geom_bar(mapping=aes(x=trip_month,fill=usertype))+
+  facet_wrap(~usertype)+
+  labs(title="Trips per month",subtitle="split by usertype")
+```
+
+</br> 
+</br> 
+</br>
+
+#### Now we will plot a bar graph with difference in genders in terms of users. We can notice there is a disparity between men and women in terms of ridership.
+```{r}
+ggplot(data=yeardata)+
+  geom_bar(mapping=aes(x=gender,fill=gender)) +
+  facet_wrap(~usertype) +
+  labs(title="Gender breakdown of riders", subtitle="split by usertype")
+```
+
+</br> 
+</br> 
+</br>
+
+#### Now we will explore users by birthyear. Use _coord_cartesian(xlim)_ to remove front and back end of the X-axis with unnecesary decades i.e. 1890, 2030. We are able to see there is a growing wave of younger people who are using the bike shares.
+```{r}
+ggplot(data=yeardata)+
+  geom_bar(mapping=aes(x=birthyear,fill=gender))+
+  coord_cartesian(xlim = c(1945, 2005))+
+  labs(title="Users by birthyear",subtitle="1945-2005")
+```
+
+</br> 
+</br> 
+</br>
+
+#### Next we will graph day of week usage averages over the year split by usertype. The days of week will now display in order Monday to Sunday as per our prior rearange function.
+```{r}
+ggplot(data=yeardata)+
+  geom_bar(mapping=aes(x=day_of_week,fill=usertype))+
+  facet_wrap(~usertype)+
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))+
+  labs(title="Weekday usage",subtitle="Split by usertype")
+```
+
+</br> 
+</br>
+</br>
+</br>
+
+### _Summary of analysis:_
+##### There is a large disparity between male bikers and women bikers. However, if we further break it down by age groups there is a growing proportion of young girls and women using the bike shares. So there is a potential demographic to create ads towards. We also notice that casual ridership peaks on the weekends. 
+##### Annual ridership dips on the weekends, as we can assume its primarialy commuters. So weekend casual riders might be convinced into buying annual memberships through ads or discounts.
+##### However, I primarialy recommend further research and studies into these questions to be able to draw more meaningful conclusions.
+
+</br>
+
+### _Recommendations_
+##### 1: Create advertisement campaign for young people to use the bike shares. Potenital to offer youth discounts for annual memberships.
+##### 2: Create an advertisement campaign for casual weekend riders. Possibly offer weekend or seasonal passes.
+##### 3: Collect more data on the habits and wants of weekekend riders in terms of purchasing an annual pass
